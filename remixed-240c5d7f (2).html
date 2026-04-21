@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SignBridge — ASL Translator</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0c10;--s1:#12151c;--s2:#1a1d26;--s3:#222535;
+  --border:rgba(255,255,255,0.08);--border2:rgba(255,255,255,0.14);
+  --text:#eeecea;--muted:#7a7a8a;--accent:#5bf5a0;--accent2:#28c970;
+  --adim:rgba(91,245,160,0.1);--red:#f77;--amber:#fbbf24;
+  --r:10px;--rl:16px;
+}
+html,body{height:100%;font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);overflow:hidden}
+.app{display:grid;grid-template-columns:200px 1fr;height:100vh}
+.sidebar{background:var(--s1);border-right:1px solid var(--border);display:flex;flex-direction:column}
+.logo{padding:20px 18px 16px;border-bottom:1px solid var(--border)}
+.logo-name{font-size:18px;font-weight:700;letter-spacing:-0.4px}
+.logo-tag{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-top:2px}
+nav{padding:8px 0;flex:1}
+.nav-btn{width:100%;display:flex;align-items:center;gap:10px;padding:9px 18px;font-size:13px;color:var(--muted);background:none;border:none;border-left:2px solid transparent;cursor:pointer;text-align:left;transition:.15s}
+.nav-btn:hover{color:var(--text);background:rgba(255,255,255,.03)}
+.nav-btn.active{color:var(--accent);border-left-color:var(--accent);background:var(--adim);font-weight:600}
+.sidebar-footer{padding:14px 18px;font-size:10px;color:var(--muted);line-height:1.7;border-top:1px solid var(--border)}
+.main{overflow-y:auto}
+.panel{display:none;padding:24px}
+.panel.active{display:block}
+.ph{margin-bottom:20px}
+.ph h2{font-size:22px;font-weight:700;letter-spacing:-0.3px}
+.ph p{font-size:13px;color:var(--muted);margin-top:4px}
+
+/* CAMERA */
+.cam-layout{display:grid;grid-template-columns:1fr 300px;gap:16px;align-items:start}
+.cam-box{background:var(--s1);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden}
+.video-wrap{position:relative;aspect-ratio:4/3;background:#05060a;display:flex;align-items:center;justify-content:center}
+video{width:100%;height:100%;object-fit:cover;display:none;transform:scaleX(-1)}
+canvas{display:none}
+.placeholder{text-align:center;padding:40px 20px}
+.placeholder .pi{font-size:56px;opacity:.15;margin-bottom:14px}
+.placeholder p{font-size:13px;color:var(--muted);line-height:1.6}
+.hud{position:absolute;inset:0;pointer-events:none;display:none}
+.corner{position:absolute;width:18px;height:18px}
+.tl{top:14px;left:14px;border-top:2px solid var(--accent);border-left:2px solid var(--accent)}
+.tr{top:14px;right:14px;border-top:2px solid var(--accent);border-right:2px solid var(--accent)}
+.bl{bottom:14px;left:14px;border-bottom:2px solid var(--accent);border-left:2px solid var(--accent)}
+.br{bottom:14px;right:14px;border-bottom:2px solid var(--accent);border-right:2px solid var(--accent)}
+.rec{position:absolute;top:10px;right:10px;display:none;align-items:center;gap:6px;background:rgba(0,0,0,.7);border-radius:20px;padding:4px 10px;font-size:11px;color:var(--amber);font-family:monospace}
+.rec-dot{width:6px;height:6px;border-radius:50%;background:var(--amber);animation:blink .7s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.1}}
+.cam-ctrls{padding:14px 16px;display:flex;gap:8px;border-top:1px solid var(--border);align-items:center;flex-wrap:wrap}
+.stat-row{padding:8px 16px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px;font-size:11px;color:var(--muted);font-family:monospace}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--muted);flex-shrink:0;transition:.3s}
+.dot.on{background:var(--accent);box-shadow:0 0 6px var(--accent2)}
+.dot.busy{background:var(--amber);animation:blink .5s infinite}
+
+/* AUTO MODE */
+.auto-badge{display:inline-flex;align-items:center;gap:5px;background:rgba(251,191,36,.12);color:var(--amber);border:1px solid rgba(251,191,36,.2);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600}
+.auto-badge.on{background:var(--adim);color:var(--accent);border-color:rgba(91,245,160,.2)}
+
+/* TIMER RING */
+.timer-ring{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);display:none}
+.timer-ring svg{width:36px;height:36px}
+.ring-bg{fill:none;stroke:rgba(255,255,255,.1);stroke-width:3}
+.ring-fill{fill:none;stroke:var(--accent);stroke-width:3;stroke-dasharray:88;stroke-dashoffset:88;stroke-linecap:round;transform:rotate(-90deg);transform-origin:50% 50%;transition:stroke-dashoffset .1s linear}
+.ring-txt{font-size:10px;fill:var(--text);font-family:monospace;dominant-baseline:middle;text-anchor:middle}
+
+/* RIGHT CARDS */
+.right-col{display:flex;flex-direction:column;gap:14px}
+.card{background:var(--s1);border:1px solid var(--border);border-radius:var(--rl);padding:18px}
+.card-label{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:10px}
+.sign-big{font-size:72px;font-weight:800;color:var(--accent);text-align:center;line-height:1;min-height:80px;display:flex;align-items:center;justify-content:center}
+.sign-desc{font-size:12px;color:var(--muted);text-align:center;margin-top:6px;min-height:16px;line-height:1.4}
+.conf-bar-bg{background:rgba(255,255,255,.07);border-radius:4px;height:5px;margin-top:12px}
+.conf-bar{height:5px;border-radius:4px;width:0%;transition:width .4s,background .4s}
+.conf-txt{font-size:11px;color:var(--muted);font-family:monospace;margin-top:5px}
+.output-txt{font-size:20px;font-weight:600;min-height:60px;line-height:1.4;word-break:break-all}
+.output-txt.empty{font-size:13px;color:var(--muted);font-weight:400;font-style:italic}
+.output-actions{display:flex;gap:6px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);flex-wrap:wrap}
+
+/* TIPS BOX */
+.tips{background:rgba(251,191,36,.05);border:1px solid rgba(251,191,36,.15);border-radius:var(--r);padding:12px 14px;margin-top:14px}
+.tips-head{font-size:11px;font-weight:700;color:var(--amber);margin-bottom:6px}
+.tips ul{font-size:11px;color:var(--muted);padding-left:14px;line-height:1.9}
+
+/* BUTTONS */
+.btn{font-family:inherit;font-size:12px;font-weight:600;padding:7px 14px;border-radius:8px;border:1px solid var(--border2);background:var(--s2);color:var(--text);cursor:pointer;display:inline-flex;align-items:center;gap:5px;transition:.15s;white-space:nowrap}
+.btn:hover{background:var(--s3);border-color:rgba(255,255,255,.22)}
+.btn:active{transform:scale(.97)}
+.btn:disabled{opacity:.35;cursor:not-allowed;transform:none}
+.btn.primary{background:var(--accent);color:#060a0e;border-color:var(--accent);font-weight:700}
+.btn.primary:hover{background:#4ae090}
+.btn.ghost{background:transparent;border-color:transparent;color:var(--muted);font-size:12px}
+.btn.ghost:hover{color:var(--text);background:var(--s2)}
+.btn.danger{border-color:rgba(247,119,119,.25);color:var(--red);background:transparent}
+.btn.danger:hover{background:rgba(247,119,119,.08)}
+.btn.warn{border-color:rgba(251,191,36,.3);color:var(--amber);background:rgba(251,191,36,.06)}
+.btn.warn:hover{background:rgba(251,191,36,.12)}
+
+/* REFERENCE */
+.ref-sec{margin-bottom:28px}
+.ref-label{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+.alpha-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:8px}
+.alpha-card{background:var(--s1);border:1px solid var(--border);border-radius:var(--r);padding:12px 6px;text-align:center;transition:.15s}
+.alpha-card:hover{border-color:var(--border2);background:var(--s2)}
+.ac-em{font-size:24px;margin-bottom:5px;line-height:1}
+.ac-l{font-size:16px;font-weight:700;color:var(--accent)}
+.ac-d{font-size:9px;color:var(--muted);margin-top:3px;line-height:1.3}
+.phrase-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:10px}
+.phrase-card{background:var(--s1);border:1px solid var(--border);border-radius:var(--r);padding:12px 14px;display:flex;align-items:center;gap:12px;transition:.15s}
+.phrase-card:hover{border-color:var(--border2)}
+.pc-em{font-size:22px;flex-shrink:0}
+.pc-name{font-size:13px;font-weight:600}
+.pc-d{font-size:11px;color:var(--muted);margin-top:2px}
+
+/* LEARN */
+.learn-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start}
+.flashcard{background:var(--s1);border:1px solid var(--border);border-radius:var(--rl);padding:40px 28px;text-align:center}
+.fc-em{font-size:88px;line-height:1;margin-bottom:16px}
+.fc-l{font-size:52px;font-weight:800;color:var(--accent);line-height:1}
+.fc-d{font-size:13px;color:var(--muted);margin-top:10px;max-width:200px;margin-inline:auto;line-height:1.5}
+.fc-nav{display:flex;gap:10px;margin-top:18px;align-items:center;justify-content:center}
+.fc-count{font-family:monospace;font-size:12px;color:var(--muted);min-width:48px;text-align:center}
+.prog{background:rgba(255,255,255,.06);border-radius:4px;height:3px;margin-top:14px;overflow:hidden}
+.prog-fill{background:var(--accent);height:3px;transition:width .3s}
+.quiz-box{background:var(--s1);border:1px solid var(--border);border-radius:var(--rl);padding:20px}
+.quiz-head{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:14px}
+.quiz-q{font-size:15px;font-weight:600;margin-bottom:12px}
+.quiz-em{font-size:44px;text-align:center;margin-bottom:14px}
+.quiz-opts{display:flex;flex-direction:column;gap:7px}
+.qopt{background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:9px 14px;cursor:pointer;font-size:13px;font-family:inherit;color:var(--text);text-align:left;transition:.15s}
+.qopt:hover{border-color:var(--border2)}
+.qopt.correct{border-color:var(--accent);background:var(--adim);color:var(--accent)}
+.qopt.wrong{border-color:var(--red);background:rgba(247,119,119,.07);color:var(--red)}
+.quiz-res{margin-top:12px;font-size:13px;min-height:18px}
+.quiz-score{font-family:monospace;font-size:11px;color:var(--muted);margin-top:14px;padding-top:12px;border-top:1px solid var(--border)}
+
+.toast{position:fixed;bottom:20px;right:20px;background:var(--s3);border:1px solid var(--border2);border-radius:var(--r);padding:10px 16px;font-size:13px;z-index:999;transform:translateY(60px);opacity:0;transition:all .25s;pointer-events:none}
+.toast.show{transform:translateY(0);opacity:1}
+::-webkit-scrollbar{width:5px}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:3px}
+</style>
+</head>
+<body>
+<div class="app">
+<aside class="sidebar">
+  <div class="logo"><div class="logo-name">SignBridge</div><div class="logo-tag">ASL Translator</div></div>
+  <nav>
+    <button class="nav-btn active" onclick="show('camera')"><span>📷</span> Camera</button>
+    <button class="nav-btn" onclick="show('reference')"><span>📖</span> Reference</button>
+    <button class="nav-btn" onclick="show('learn')"><span>🎓</span> Learn</button>
+  </nav>
+  <div class="sidebar-footer">Powered by Claude AI<br>American Sign Language</div>
+</aside>
+
+<main class="main">
+
+<!-- CAMERA PANEL -->
+<div id="p-camera" class="panel active">
+  <div class="ph"><h2>Live Translator</h2><p>Use Manual or Auto mode. Best results: good lighting, plain background, hand centered.</p></div>
+  <div class="cam-layout">
+    <div>
+      <div class="cam-box">
+        <div class="video-wrap" id="vwrap">
+          <div class="placeholder" id="ph">
+            <div class="pi">🤚</div>
+            <p>Press <strong>Start Camera</strong> below<br>then hold an ASL sign in frame</p>
+          </div>
+          <video id="vid" autoplay playsinline></video>
+          <canvas id="snap"></canvas>
+          <div class="hud" id="hud">
+            <div class="corner tl"></div><div class="corner tr"></div>
+            <div class="corner bl"></div><div class="corner br"></div>
+            <div class="rec" id="rec"><div class="rec-dot"></div><span id="recTxt">ANALYZING</span></div>
+          </div>
+          <div class="timer-ring" id="timerRing">
+            <svg viewBox="0 0 36 36">
+              <circle class="ring-bg" cx="18" cy="18" r="14"/>
+              <circle class="ring-fill" id="ringFill" cx="18" cy="18" r="14"/>
+              <text class="ring-txt" x="18" y="18" id="ringTxt">3</text>
+            </svg>
+          </div>
+        </div>
+        <div class="cam-ctrls">
+          <button class="btn primary" id="btnStart" onclick="startCam()">▶ Start Camera</button>
+          <button class="btn primary" id="btnSnap" onclick="manualSnap()" style="display:none" disabled>✋ Translate Now</button>
+          <button class="btn warn" id="btnAuto" onclick="toggleAuto()" style="display:none">⏱ Auto: OFF</button>
+          <button class="btn danger" id="btnStop" onclick="stopCam()" style="display:none">■ Stop</button>
+        </div>
+        <div class="stat-row">
+          <div class="dot" id="sdot"></div>
+          <span id="stxt">Camera offline — click Start Camera</span>
+        </div>
+      </div>
+      <div class="tips">
+        <div class="tips-head">💡 Tips for best detection</div>
+        <ul>
+          <li>Bright, even lighting — no shadows on your hand</li>
+          <li>Plain contrasting background (white wall is ideal)</li>
+          <li>Hold sign <strong>still</strong> for 1–2 seconds before translating</li>
+          <li>Keep hand fully in frame, centered</li>
+          <li>Try <strong>Auto mode</strong> — it captures every 3 seconds automatically</li>
+        </ul>
+      </div>
+    </div>
+    <div class="right-col">
+      <div class="card">
+        <div class="card-label">Detected Sign</div>
+        <div class="sign-big" id="signBig">—</div>
+        <div class="sign-desc" id="signDesc">Hold a sign in frame then click Translate Now</div>
+        <div class="conf-bar-bg"><div class="conf-bar" id="confBar"></div></div>
+        <div class="conf-txt" id="confTxt">confidence: —</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Translated Text</div>
+        <div id="outTxt" class="output-txt empty">Recognized text appears here…</div>
+        <div class="output-actions">
+          <button class="btn ghost" onclick="addSp()">⎵ Space</button>
+          <button class="btn ghost" onclick="delCh()">⌫ Delete</button>
+          <button class="btn danger" onclick="clearAll()">Clear</button>
+          <button class="btn ghost" onclick="copyText()">⎘ Copy</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- REFERENCE PANEL -->
+<div id="p-reference" class="panel">
+  <div class="ph"><h2>Sign Reference</h2><p>Full ASL alphabet and common phrases.</p></div>
+  <div class="ref-sec">
+    <div class="ref-label">ASL Alphabet — A to Z</div>
+    <div class="alpha-grid" id="alphaGrid"></div>
+  </div>
+  <div class="ref-sec">
+    <div class="ref-label">Common Phrases</div>
+    <div class="phrase-grid" id="phraseGrid"></div>
+  </div>
+</div>
+
+<!-- LEARN PANEL -->
+<div id="p-learn" class="panel">
+  <div class="ph"><h2>Learn ASL</h2><p>Flashcards and quiz to memorize the alphabet.</p></div>
+  <div class="learn-grid">
+    <div>
+      <div class="flashcard">
+        <div class="fc-em" id="fcEm">✊</div>
+        <div class="fc-l" id="fcL">A</div>
+        <div class="fc-d" id="fcD">Closed fist with thumb resting on the side</div>
+      </div>
+      <div class="fc-nav">
+        <button class="btn" onclick="prevCard()">← Prev</button>
+        <span class="fc-count" id="fcCount">1 / 26</span>
+        <button class="btn primary" onclick="nextCard()">Next →</button>
+      </div>
+      <div class="prog"><div class="prog-fill" id="progFill" style="width:4%"></div></div>
+    </div>
+    <div class="quiz-box">
+      <div class="quiz-head">Quick Quiz</div>
+      <div class="quiz-q">Which letter is this sign?</div>
+      <div class="quiz-em" id="qEm">✊</div>
+      <div class="quiz-opts" id="qOpts"></div>
+      <div class="quiz-res" id="qRes"></div>
+      <div class="quiz-score" id="qScore">Score: 0 / 0</div>
+      <button class="btn" style="margin-top:12px" onclick="newQ()">New question →</button>
+    </div>
+  </div>
+</div>
+
+</main>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+const ASL=[
+  {l:'A',e:'✊',d:'Closed fist, thumb resting on side of index finger'},
+  {l:'B',e:'🖐️',d:'Flat hand, four fingers straight up, thumb folded across palm'},
+  {l:'C',e:'🤏',d:'Curved hand open like gripping a cup — C shape'},
+  {l:'D',e:'☝️',d:'Index finger pointing up, other fingers curl to touch thumb'},
+  {l:'E',e:'🤜',d:'All four fingers bent at knuckles, thumb tucked under'},
+  {l:'F',e:'👌',d:'Index and thumb form a circle, other three fingers point up'},
+  {l:'G',e:'👉',d:'Index finger and thumb both pointing sideways (like a gun shape)'},
+  {l:'H',e:'✌️',d:'Index and middle fingers pointing sideways, held together'},
+  {l:'I',e:'🤙',d:'Only the pinky finger raised, rest of hand in a fist'},
+  {l:'J',e:'🤙',d:'Pinky up like I, then draw a J curve in the air'},
+  {l:'K',e:'✌️',d:'Index and middle fingers up in a V, thumb between them'},
+  {l:'L',e:'🤞',d:'Index finger points straight up, thumb points straight out — L shape'},
+  {l:'M',e:'✊',d:'Three fingers (index, middle, ring) folded over the thumb'},
+  {l:'N',e:'✊',d:'Two fingers (index, middle) folded over the thumb'},
+  {l:'O',e:'👌',d:'All fingers curve to meet thumb forming a circle or oval — O shape'},
+  {l:'P',e:'🤏',d:'Like K rotated downward, index pointing down'},
+  {l:'Q',e:'👇',d:'Like G rotated downward, index and thumb pointing down'},
+  {l:'R',e:'🤞',d:'Index and middle fingers crossed over each other, pointing up'},
+  {l:'S',e:'✊',d:'Tight fist with thumb resting over the front of the fingers'},
+  {l:'T',e:'✊',d:'Fist with thumb tucked between index and middle fingers'},
+  {l:'U',e:'✌️',d:'Index and middle fingers pointing straight up, held together parallel'},
+  {l:'V',e:'✌️',d:'Index and middle fingers spread apart in a clear V shape'},
+  {l:'W',e:'🤟',d:'Index, middle, and ring fingers all spread up — W shape'},
+  {l:'X',e:'☝️',d:'Index finger bent into a hook or crooked shape'},
+  {l:'Y',e:'🤙',d:'Thumb and pinky finger both extended out, middle three fingers down'},
+  {l:'Z',e:'☝️',d:'Index finger up, trace a Z shape in the air'},
+];
+const PHRASES=[
+  {e:'👋',t:'Hello',d:'Open palm, wave side to side'},
+  {e:'🙏',t:'Thank you',d:'Flat hand moves from chin outward'},
+  {e:'❤️',t:'I love you',d:'Index, pinky, and thumb all extended'},
+  {e:'👍',t:'Yes',d:'Fist nods up and down like a head nodding'},
+  {e:'👎',t:'No',d:'Index and middle tap against thumb (like scissors)'},
+  {e:'🛑',t:'Stop',d:'Flat hand chops down onto open palm'},
+  {e:'🙌',t:'Help',d:'Fist on open palm, both hands lift upward'},
+  {e:'🤝',t:'Please',d:'Flat hand rubs circular motion on chest'},
+  {e:'😐',t:'Sorry',d:'Fist in circular motion on chest'},
+  {e:'🤙',t:'Call me',d:'Thumb and pinky out (like a phone), shake slightly'},
+];
+
+// STATE
+let stream=null,busy=false,outStr='',autoMode=false,autoTimer=null,countdown=0,countdownTimer=null;
+let cardIdx=0,qScore=0,qTotal=0,qAns=null,qDone=false;
+const CONFIDENCE_THRESHOLD=35;
+const AUTO_INTERVAL=3500;
+
+// NAV
+function show(id){
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('p-'+id).classList.add('active');
+  ['camera','reference','learn'].forEach((n,i)=>{if(n===id)document.querySelectorAll('.nav-btn')[i].classList.add('active');});
+}
+
+// CAMERA
+async function startCam(){
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({
+      video:{facingMode:'user',width:{ideal:1280},height:{ideal:720},frameRate:{ideal:30}}
+    });
+    const v=document.getElementById('vid');
+    v.srcObject=stream; v.style.display='block';
+    document.getElementById('ph').style.display='none';
+    document.getElementById('hud').style.display='block';
+    document.getElementById('btnStart').style.display='none';
+    document.getElementById('btnSnap').style.display='';
+    document.getElementById('btnSnap').disabled=false;
+    document.getElementById('btnAuto').style.display='';
+    document.getElementById('btnStop').style.display='';
+    setStatus('on','Camera ready — hold a sign and click Translate Now');
+  }catch(e){
+    setStatus('off','Camera permission denied — please allow camera in browser settings');
+    toast('❌ Camera permission denied');
+  }
+}
+function stopCam(){
+  stopAuto();
+  if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}
+  const v=document.getElementById('vid');
+  v.srcObject=null; v.style.display='none';
+  document.getElementById('ph').style.display='';
+  document.getElementById('hud').style.display='none';
+  document.getElementById('timerRing').style.display='none';
+  document.getElementById('btnStart').style.display='';
+  document.getElementById('btnSnap').style.display='none';
+  document.getElementById('btnAuto').style.display='none';
+  document.getElementById('btnStop').style.display='none';
+  setStatus('off','Camera offline');
+  resetDetected();
+}
+
+function manualSnap(){
+  if(!stream||busy)return;
+  captureAndSend();
+}
+
+function toggleAuto(){
+  autoMode=!autoMode;
+  const btn=document.getElementById('btnAuto');
+  if(autoMode){
+    btn.textContent='⏹ Auto: ON';
+    btn.className='btn primary';
+    document.getElementById('timerRing').style.display='block';
+    scheduleAuto();
+    setStatus('on','Auto mode active — capturing every 3 seconds');
+  } else {
+    stopAuto();
+    btn.textContent='⏱ Auto: OFF';
+    btn.className='btn warn';
+    document.getElementById('timerRing').style.display='none';
+    setStatus('on','Auto mode off');
+  }
+}
+function stopAuto(){
+  autoMode=false;
+  clearTimeout(autoTimer);
+  clearInterval(countdownTimer);
+  document.getElementById('timerRing').style.display='none';
+  document.getElementById('btnAuto').textContent='⏱ Auto: OFF';
+  document.getElementById('btnAuto').className='btn warn';
+}
+function scheduleAuto(){
+  if(!autoMode)return;
+  countdown=3;
+  updRing();
+  clearInterval(countdownTimer);
+  countdownTimer=setInterval(()=>{
+    countdown=Math.max(0,countdown-.1);
+    updRing();
+  },100);
+  autoTimer=setTimeout(()=>{
+    clearInterval(countdownTimer);
+    if(autoMode&&stream&&!busy){
+      captureAndSend(true);
+    } else if(autoMode){
+      scheduleAuto();
+    }
+  },AUTO_INTERVAL);
+}
+function updRing(){
+  const secs=Math.ceil(countdown);
+  const pct=countdown/3;
+  document.getElementById('ringFill').style.strokeDashoffset=88-(88*pct);
+  document.getElementById('ringTxt').textContent=secs;
+}
+
+async function captureAndSend(fromAuto=false){
+  if(!stream||busy)return;
+  busy=true;
+  if(!fromAuto)document.getElementById('btnSnap').disabled=true;
+  document.getElementById('rec').style.display='flex';
+  document.getElementById('recTxt').textContent='ANALYZING';
+  setStatus('busy','Sending to Claude AI…');
+
+  // Capture frame
+  const v=document.getElementById('vid');
+  const c=document.getElementById('snap');
+  c.width=v.videoWidth||640;
+  c.height=v.videoHeight||480;
+  const ctx=c.getContext('2d');
+  // Mirror back since video is CSS-mirrored
+  ctx.save();ctx.translate(c.width,0);ctx.scale(-1,1);
+  ctx.drawImage(v,0,0);ctx.restore();
+  const imgB64=c.toDataURL('image/jpeg',.9).split(',')[1];
+
+  const PROMPT=`You are a highly trained ASL (American Sign Language) interpreter. Your job is to identify hand signs from images.
+
+TASK: Look at the hand in this image. Identify which ASL letter (A-Z) or common sign it represents.
+
+ASL ALPHABET REFERENCE:
+A = closed fist, thumb on side
+B = flat hand, 4 fingers up, thumb across palm
+C = curved hand forming C shape
+D = index up, other fingers curl to thumb
+E = all fingers bent at knuckles, thumb tucked
+F = index+thumb circle, other 3 fingers up
+G = index+thumb pointing sideways
+H = index+middle pointing sideways together
+I = only pinky raised
+J = like I then draw J in air
+K = index+middle up, thumb between them
+L = index up + thumb out (L-shape)
+M = 3 fingers over thumb
+N = 2 fingers over thumb
+O = all fingers curved to thumb making O
+P = like K pointing down
+Q = like G pointing down
+R = index+middle crossed
+S = tight fist, thumb over fingers
+T = thumb tucked between index+middle
+U = index+middle together pointing up
+V = index+middle spread apart (V-shape)
+W = index+middle+ring all up spread
+X = index finger bent/hooked
+Y = thumb+pinky out, others down
+Z = index up, trace Z shape
+
+COMMON SIGNS: HELLO (wave), THANK_YOU (hand from chin outward), I_LOVE_YOU (index+pinky+thumb out), YES (fist nodding), NO (index+middle tap thumb), STOP (flat hand chops down), PLEASE (circular on chest), SORRY (fist circles chest)
+
+INSTRUCTIONS:
+1. Look carefully at the exact finger positions and shapes
+2. Match to the closest ASL letter or sign
+3. Be decisive — pick the single best match
+4. Set confidence based on how clear the hand position is
+
+Respond with ONLY this JSON (no other text, no markdown):
+{"sign":"A","confidence":82,"description":"closed fist with thumb resting on the side of the index finger"}
+
+If no hand is visible respond: {"sign":"UNKNOWN","confidence":0,"description":"no hand detected in frame"}`;
+
+  try{
+    const res=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        model:'claude-sonnet-4-20250514',
+        max_tokens:200,
+        messages:[{role:'user',content:[
+          {type:'image',source:{type:'base64',media_type:'image/jpeg',data:imgB64}},
+          {type:'text',text:PROMPT}
+        ]}]
+      })
+    });
+    if(!res.ok){const e=await res.text();throw new Error('API '+res.status+': '+e);}
+    const data=await res.json();
+    const raw=(data.content||[]).map(b=>b.text||'').join('').trim();
+
+    // Robust JSON extraction
+    let result;
+    try{
+      const match=raw.match(/\{[\s\S]*\}/);
+      result=JSON.parse(match?match[0]:raw);
+    }catch{
+      result={sign:'UNKNOWN',confidence:0,description:'Could not parse response — try again'};
+    }
+
+    const sign=(result.sign||'UNKNOWN').toUpperCase().trim();
+    const conf=Math.min(100,Math.max(0,Math.round(parseFloat(result.confidence)||0)));
+    const desc=result.description||'';
+
+    // Update UI
+    document.getElementById('signBig').textContent=sign==='UNKNOWN'?'?':sign;
+    document.getElementById('signDesc').textContent=desc;
+    const bar=document.getElementById('confBar');
+    bar.style.width=conf+'%';
+    bar.style.background=conf>=70?'var(--accent)':conf>=45?'var(--amber)':'var(--red)';
+    document.getElementById('confTxt').textContent='confidence: '+conf+'%'+(conf<CONFIDENCE_THRESHOLD?' (too low — try again)':'');
+
+    if(sign!=='UNKNOWN'&&conf>=CONFIDENCE_THRESHOLD){
+      if(sign.length===1){
+        outStr+=sign;
+      } else {
+        if(outStr&&!outStr.endsWith(' '))outStr+=' ';
+        outStr+=sign+' ';
+      }
+      renderOut();
+      setStatus('on','✓ '+sign+' detected ('+conf+'% confidence)');
+    } else if(sign==='UNKNOWN'){
+      setStatus('on','No hand detected — make sure your hand is in frame');
+    } else {
+      setStatus('on','Low confidence ('+conf+'%) — adjust lighting or position');
+    }
+  }catch(e){
+    console.error(e);
+    setStatus('on','Request failed: '+e.message);
+    toast('❌ AI error — check console');
+  }
+
+  document.getElementById('rec').style.display='none';
+  if(!fromAuto)document.getElementById('btnSnap').disabled=false;
+  busy=false;
+  if(autoMode)scheduleAuto();
+}
+
+function resetDetected(){
+  document.getElementById('signBig').textContent='—';
+  document.getElementById('signDesc').textContent='Hold a sign and click Translate Now';
+  document.getElementById('confBar').style.width='0%';
+  document.getElementById('confTxt').textContent='confidence: —';
+}
+function renderOut(){
+  const el=document.getElementById('outTxt');
+  if(!outStr){el.className='output-txt empty';el.textContent='Recognized text appears here…';}
+  else{el.className='output-txt';el.textContent=outStr;}
+}
+function addSp(){outStr+=' ';renderOut();}
+function delCh(){if(outStr.endsWith(' ')&&!outStr.trim())outStr='';else outStr=outStr.trimEnd().slice(0,-1);renderOut();}
+function clearAll(){outStr='';renderOut();resetDetected();}
+async function copyText(){
+  if(!outStr){toast('Nothing to copy');return;}
+  try{await navigator.clipboard.writeText(outStr.trim());toast('✓ Copied to clipboard');}
+  catch{toast('Copy failed — try manually selecting the text');}
+}
+function setStatus(state,msg){
+  const d=document.getElementById('sdot');
+  d.className='dot'+(state==='on'?' on':state==='busy'?' busy':'');
+  document.getElementById('stxt').textContent=msg;
+}
+function toast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.classList.add('show');
+  clearTimeout(t._t);
+  t._t=setTimeout(()=>t.classList.remove('show'),3000);
+}
+
+// REFERENCE
+function buildRef(){
+  document.getElementById('alphaGrid').innerHTML=ASL.map(s=>
+    `<div class="alpha-card"><div class="ac-em">${s.e}</div><div class="ac-l">${s.l}</div><div class="ac-d">${s.d.split(',')[0].split('—')[0]}</div></div>`
+  ).join('');
+  document.getElementById('phraseGrid').innerHTML=PHRASES.map(p=>
+    `<div class="phrase-card"><div class="pc-em">${p.e}</div><div><div class="pc-name">${p.t}</div><div class="pc-d">${p.d}</div></div></div>`
+  ).join('');
+}
+
+// FLASHCARDS
+function updCard(){
+  const c=ASL[cardIdx];
+  document.getElementById('fcEm').textContent=c.e;
+  document.getElementById('fcL').textContent=c.l;
+  document.getElementById('fcD').textContent=c.d;
+  document.getElementById('fcCount').textContent=(cardIdx+1)+' / '+ASL.length;
+  document.getElementById('progFill').style.width=((cardIdx+1)/ASL.length*100)+'%';
+}
+function nextCard(){cardIdx=(cardIdx+1)%ASL.length;updCard();}
+function prevCard(){cardIdx=(cardIdx-1+ASL.length)%ASL.length;updCard();}
+
+// QUIZ
+function newQ(){
+  qDone=false;
+  const correct=ASL[Math.floor(Math.random()*ASL.length)];
+  qAns=correct.l;
+  document.getElementById('qEm').textContent=correct.e;
+  const opts=[correct];
+  while(opts.length<4){const r=ASL[Math.floor(Math.random()*ASL.length)];if(!opts.find(o=>o.l===r.l))opts.push(r);}
+  opts.sort(()=>Math.random()-.5);
+  document.getElementById('qOpts').innerHTML=opts.map(o=>
+    `<button class="qopt" onclick="checkQ('${o.l}',this)">${o.e} ${o.l}</button>`
+  ).join('');
+  document.getElementById('qRes').textContent='';
+}
+function checkQ(l,el){
+  if(qDone)return; qDone=true; qTotal++;
+  if(l===qAns){qScore++;el.classList.add('correct');document.getElementById('qRes').textContent='✓ Correct!';document.getElementById('qRes').style.color='var(--accent)';}
+  else{el.classList.add('wrong');document.getElementById('qRes').textContent='✗ Answer was: '+qAns;document.getElementById('qRes').style.color='var(--red)';document.querySelectorAll('.qopt').forEach(b=>{if(b.textContent.includes(qAns+' ')||b.textContent.startsWith(qAns))b.classList.add('correct');});}
+  document.getElementById('qScore').textContent='Score: '+qScore+' / '+qTotal;
+}
+
+buildRef(); updCard(); newQ();
+</script>
+</body>
+</html>
